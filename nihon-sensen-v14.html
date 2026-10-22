@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>日本戦線 ― 師団配置・観戦ウォーゲーム</title>
+<style>
+:root{--sea:#d6e4e7;--land:#efe8d3;--coast:#8f9d97;--ink:#1c2830;--panel:#f6f2e6;--line:#c8c1aa;--b:#2c60c6;--r:#c0382e;--acc:#d9a021;--mut:#5b6a72;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--sea:#0d1a22;--land:#25313a;--coast:#4d5f69;--ink:#e6edf0;--panel:#142530;--line:#2c3f4a;--b:#5b8cf0;--r:#ee6a5e;--acc:#f0b840;--mut:#92a3ab}}
+:root[data-theme="dark"]{--sea:#0d1a22;--land:#25313a;--coast:#4d5f69;--ink:#e6edf0;--panel:#142530;--line:#2c3f4a;--b:#5b8cf0;--r:#ee6a5e;--acc:#f0b840;--mut:#92a3ab}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--panel);color:var(--ink);font-family:"Hiragino Sans","Yu Gothic","Noto Sans JP","Meiryo",sans-serif;line-height:1.6}
+.wrap{display:flex;flex-wrap:wrap;gap:16px;max-width:1100px;margin:0 auto;padding:12px}
+.map{flex:1 1 420px;min-width:0}
+.side{flex:1 1 280px;max-width:380px}
+svg{width:100%;height:auto;max-height:calc(100vh - 80px);display:block;background:var(--sea);border-radius:6px;user-select:none;-webkit-user-select:none}
+svg.setup{touch-action:none;cursor:crosshair}
+#cast{display:flex;gap:10px;align-items:center;background:var(--ink);color:var(--panel);border-radius:6px;border-left:6px solid var(--acc);padding:8px 12px;margin-bottom:8px;min-height:24px;font-size:14px;font-weight:600}
+#cast .tag{background:var(--acc);color:#1c2830;font-weight:800;border-radius:3px;padding:0 8px;flex:none;font-size:12px}
+#ct{flex:1;min-width:0}
+h1{margin:0;font-size:24px;font-weight:800;letter-spacing:.08em}
+.sub{margin:0 0 12px;color:var(--mut);font-size:13px}
+#phase{font-size:16px;font-weight:700;margin:8px 0}
+.row{font-size:14px;margin:4px 0}
+.row input{font:inherit;font-weight:800;width:7em;border:0;border-bottom:2px dashed currentColor;background:transparent;padding:0 2px;border-radius:0}
+.row small{color:var(--mut);font-size:12px;font-weight:400}
+.row input.b{color:var(--b)}.row input.r{color:var(--r)}
+.row input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.bar{height:8px;border-radius:4px;background:var(--r);overflow:hidden;margin:6px 0 12px}
+.bar i{display:block;height:100%;background:var(--b);transition:width .2s}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+button{font:inherit;font-size:14px;padding:9px 14px;border-radius:6px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+button.p{background:var(--ink);color:var(--panel)}
+button[aria-pressed="true"].tb{background:var(--b);border-color:var(--b);color:#fff}
+button[aria-pressed="true"].tr{background:var(--r);border-color:var(--r);color:#fff}
+button[aria-pressed="true"].te{background:var(--ink);color:var(--panel)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+#help{font-size:13px;color:var(--mut);margin:8px 0}
+#msg{font-size:18px;font-weight:800;margin:8px 0}
+.land{fill:var(--land);stroke:var(--coast);stroke-width:1.5;stroke-linejoin:round}
+.city{font-size:10px;fill:var(--ink);fill-opacity:.7;paint-order:stroke;stroke:var(--land);stroke-width:3px}
+.u0{--c:var(--b)}.u1{--c:var(--r)}
+.xx{font-size:7px;font-weight:700;text-anchor:middle;fill:var(--c);paint-order:stroke;stroke:var(--land);stroke-width:2px}
+.cn{font-size:11px;font-weight:700;text-anchor:middle;fill:var(--c);paint-order:stroke;stroke:var(--land);stroke-width:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="map"><div id="cast"><span class="tag">実況</span><span id="ct"></span></div><svg id="svg" viewBox="0 0 640 720" role="img" aria-label="日本地図"><g id="land"></g><g id="T"></g><g id="lab"></g><g id="L"></g></svg></div>
+<div class="side">
+<h1>日本戦線</h1>
+<p class="sub">師団を置いて、領土の奪い合いを観戦しよう。</p>
+<div id="phase"></div>
+<div class="row"><input id="n0" class="b" value="青軍" maxlength="10" aria-label="青チームの名前"> <span id="bn"></span></div>
+<div class="row"><input id="n1" class="r" value="赤軍" maxlength="10" aria-label="赤チームの名前"> <span id="rn"></span></div>
+<div class="bar"><i id="bar" style="width:50%"></i></div>
+<div id="msg"></div>
+<div class="btns" id="btns"></div>
+<div id="help"></div>
+</div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const P=(lo,la)=>[(lo-127.5)*32.4+20,(45.8-la)*40+10];
+const LAND=[
+[[139.9,42.0],[140.4,43.3],[141.3,43.9],[141.7,45.4],[142.2,45.4],[143.4,44.6],[145.3,44.2],[145.6,43.3],[144.5,42.9],[143.3,42.0],[142.0,42.4],[141.0,42.5],[141.2,41.9],[140.6,41.5],[140.2,41.8]],
+[[141.3,41.4],[141.5,40.5],[142.0,39.5],[141.6,38.9],[141.5,38.3],[141.0,38.0],[141.0,37.0],[140.6,36.3],[140.85,35.7],[140.3,35.1],[139.85,34.9],[139.85,35.2],[139.95,35.6],[139.7,35.6],[139.65,35.3],[139.6,35.1],[139.1,35.2],[138.85,34.65],[138.3,34.6],[137.3,34.6],[137.0,34.7],[136.9,35.05],[136.9,34.3],[136.2,33.8],[135.8,33.45],[135.2,33.5],[135.15,34.2],[135.4,34.6],[134.7,34.65],[133.9,34.5],[133.2,34.35],[132.5,34.2],[131.9,33.95],[130.9,33.95],[131.0,34.4],[131.8,34.7],[132.5,35.1],[133.2,35.55],[134.3,35.55],[135.2,35.7],[135.8,35.7],[136.1,36.0],[136.7,36.9],[137.2,37.5],[137.0,36.8],[137.8,37.0],[138.5,37.4],[139.1,38.1],[139.6,38.9],[139.8,39.8],[140.0,40.5],[140.3,41.25],[141.0,41.2]],
+[[132.4,33.4],[132.7,33.95],[133.5,34.3],[134.3,34.25],[134.6,33.9],[134.2,33.5],[133.5,33.3],[133.0,32.75]],
+[[130.0,33.8],[130.9,33.9],[131.7,33.6],[131.9,32.9],[131.5,31.9],[131.3,31.4],[130.7,31.0],[130.2,31.3],[130.3,32.2],[129.9,32.8],[130.2,33.3]],
+[[128.0,29.0],[128.5,29.55],[128.8,29.4],[128.3,28.85]]].map(p=>p.map(q=>P(q[0],q[1])));
+const CITY=[["札幌",141.35,43.1],["仙台",140.9,38.3],["東京",139.8,35.7],["名古屋",136.9,35.2],["大阪",135.6,34.6],["広島",132.4,34.5],["福岡",130.4,33.6],["那覇",128.4,29.2]];
+const CITY2=CITY.concat([["青森",140.7,40.8],["新潟",139.0,37.9],["金沢",136.6,36.6],["静岡",138.4,35.0],["岡山",133.9,34.95],["高松",134.2,34.2],["高知",133.6,33.4],["熊本",130.75,32.8],["鹿児島",130.6,31.6],["函館",140.7,41.7],["松江",132.9,35.4],["長野",138.2,36.65],["宇都宮",139.9,36.6],["京都",135.6,35.4]]).map(c=>{const[x,y]=P(c[1],c[2]);return{n:c[0],x,y}});
+const LD=p=>`M${p.map(q=>q.map(v=>v.toFixed(1)).join(',')).join('L')}Z`;
+$('#land').innerHTML=`<clipPath id="lc">${LAND.map(p=>`<path d="${LD(p)}"/>`).join('')}</clipPath>`+LAND.map(p=>`<path class="land" d="${LD(p)}"/>`).join('')+'<rect x="12" y="636" width="84" height="66" rx="4" fill="none" stroke="var(--coast)" stroke-dasharray="4 3"/>';
+$('#T').setAttribute('clip-path','url(#lc)');
+$('#lab').innerHTML=CITY.map(c=>{const[x,y]=P(c[1],c[2]);return `<circle cx="${x}" cy="${y}" r="2" style="fill:var(--ink);fill-opacity:.6"/><text class="city" x="${x+5}" y="${y+14}">${c[0]}</text>`}).join('');
+
+function inPoly(p,x,y){let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const[a,b]=p[i],[d,e]=p[j];if((b>y)!=(e>y)&&x<(d-a)*(y-b)/(e-b)+a)c=!c}return c}
+const inLand=(x,y)=>LAND.some(p=>inPoly(p,x,y));
+function segD(x,y,[ax,ay],[bx,by]){const dx=bx-ax,dy=by-ay;let t=((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy);t=Math.max(0,Math.min(1,t));return Math.hypot(x-ax-t*dx,y-ay-t*dy)}
+const nearLand=(x,y,d=7)=>inLand(x,y)||LAND.some(p=>p.some((q,i)=>segD(x,y,q,p[(i+1)%p.length])<d));
+
+/* 六角形の州（領土）グリッド */
+const HS=9,CELLS=[],CM=new Map(),DIR=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
+for(let r=0;r<=56;r++)for(let q=-30;q<=60;q++){const x=HS*Math.sqrt(3)*(q+r/2)+4,y=HS*1.5*r+4;if(x<0||x>640||y<0||y>720)continue;if(nearLand(x,y)){CM.set(q+','+r,CELLS.length);CELLS.push({x,y,q,r})}}
+CELLS.forEach(c=>c.nb=DIR.map(([a,b])=>{const k=(c.q+a)+','+(c.r+b);return CM.has(k)?CM.get(k):-1}));
+const hv=(c,a)=>[(c.x+HS*Math.cos(a*Math.PI/180)).toFixed(1),(c.y+HS*Math.sin(a*Math.PI/180)).toFixed(1)];
+const hexD=c=>'M'+[0,1,2,3,4,5].map(k=>hv(c,60*k+30).join(',')).join('L')+'Z';
+const CITYAT={};CITY2.forEach(c=>{let b=-1,bd=196;CELLS.forEach((k,i)=>{const d=(k.x-c.x)**2+(k.y-c.y)**2;if(d<bd){bd=d;b=i}});if(b>=0&&!CITYAT[b])CITYAT[b]=c.n});
+
+const CC=CITY2.map(c=>{let b=0,bd=1e12;CELLS.forEach((k,i)=>{const d=(k.x-c.x)**2+(k.y-c.y)**2;if(d<bd){bd=d;b=i}});return b});
+function island(x,y){let b=-1;LAND.forEach((p,i)=>{if(b<0&&inPoly(p,x,y))b=i});if(b>=0)return b;let bd=14;LAND.forEach((p,i)=>{p.forEach((q,j)=>{const d=segD(x,y,q,p[(j+1)%p.length]);if(d<bd){bd=d;b=i}})});return b}
+const CI=CELLS.map(c=>island(c.x,c.y)),CITYI=CITY2.map(c=>island(c.x,c.y));
+const MAXD=22,STR=CELLS.map((c,i)=>{const L=[];CELLS.forEach((d,j)=>{if(CI[j]!=CI[i]&&(c.x-d.x)**2+(c.y-d.y)**2<3600)L.push(j)});return L});
+function cellOf(x,y){
+  const x0=q=>q,r0=(y-4)/(1.5*HS),q0=(x-4)/(HS*Math.sqrt(3))-r0/2,z0=r0,y0=-q0-z0;
+  let rx=Math.round(q0),ry=Math.round(y0),rz=Math.round(z0);
+  const dx=Math.abs(rx-q0),dy=Math.abs(ry-y0),dz=Math.abs(rz-z0);
+  if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;
+  const i=CM.get(rx+','+rz);if(i!=null)return i;
+  let b=-1,bd=900;CELLS.forEach((c,k)=>{const d=(c.x-x)**2+(c.y-y)**2;if(d<bd){bd=d;b=k}});return b;
+}
+/* 海の航路グリッド（上陸作戦の経路探索用） */
+const GS=10,GW=64,GH=72,SEAF=new Uint8Array(GW*GH),SEAC=[];
+for(let gy=0;gy<GH;gy++)for(let gx=0;gx<GW;gx++){const x=gx*GS+5,y=gy*GS+5;if(!nearLand(x,y,9)){SEAF[gy*GW+gx]=1;SEAC.push({i:gy*GW+gx,x,y})}}
+function bfs(s){
+  const par=new Int16Array(GW*GH).fill(-2);par[s]=-1;const q=[s];
+  for(let h=0;h<q.length;h++){const c=q[h],cx=c%GW,cy=(c/GW)|0;
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      if(!dx&&!dy)continue;const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=GW||ny>=GH)continue;
+      const n=ny*GW+nx;if(!SEAF[n]||par[n]!=-2)continue;
+      if(dx&&dy&&(!SEAF[cy*GW+nx]||!SEAF[ny*GW+cx]))continue;
+      par[n]=c;q.push(n);
+    }}
+  return par;
+}
+
+const RANGE=20,CTOUCH=9,TN=['歩兵','戦車','火砲','空母','戦艦','重巡','軽巡','駆逐'],TM=[[1,1.25,1],[1.15,1,1.45],[1.3,.85,1]],AGGRO=110,GR=90,CAPR=20,CAPT=8,CT=.8,LV=['なし','少','普通','多','大量'],INT=[0,10,7,5,3],NUM=[0,2,4,6,8],MAXU=100,STALE=12,LHP=3,LATK=.8,CAPG=5,CGN=2,TLIM=300,ESC0=1e9,DOM=80,LSIZ=[0,6,12,20,34],SCN=['','小','中','大','特大'],AG=[0,150,180,220,70],CO=[null,{d:20,sp:1.15,at:1.1,b:3},{d:30,sp:1.25,at:1.2,b:6},{d:45,sp:1.35,at:1.3,b:10},{d:80,sp:1.5,at:1.45,b:24}];
+const CAPS=[P(135.55,34.85),P(139.75,35.9)].map(([x,y])=>({x,y}));
+const NM=['青軍','赤軍'];
+const V=t=>`var(--${t?'r':'b'})`;
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dd=()=>[{on:false,pts:[],cool:0,end:0},{on:false,pts:[],cool:0,end:0}];
+let S={phase:'setup',mode:0,ut:0,nk:0,nkCd:0,oldc:[[],[]],lv:3,units:[],snap:[],paused:false,speed:1,t:0,win:-1,why:'',fx:[],cp:[0,0],rt:[0,0],sp:[0,0],co:[0,0],coCd:[0,0],hh:[],mor:[100,100],cos:[0,0],ml:[0,0],p:[50,50],dg:[0,0],domT:[0,0],zk:0,Z:1,capT:CAPT,p0:[50,50],xs:[false,false],rf:[1,1],A:[50,50],air:[.5,.5],at:[4,6],sea:[.5,.5],as:[0,0],ss:[0,0],fs:['advance','advance'],fst:[0,0],fcd:[0,0],fm:[0,0],fa:[{x:1,y:0},{x:-1,y:0}],fpts:[[],[]],sup:[null,null],cutN:[0,0],cutSay:[0,0],cm:[0,0],cs:[null,null],cs0:[],ev:[],own:[],prog:[],dirty:true,def:dd(),fl:[],pt:0,ft:0,ct:0,idle:0,dc:0,lastFlip:0,landCd:[0,0],stale:false,lead:-1,mil:[0,0],sg:[false,false],lc:[0,0]};
+for(const t of[0,1])$('#n'+t).addEventListener('input',e=>{NM[t]=e.target.value.trim()||(t?'赤軍':'青軍');draw()});
+const cnt=t=>S.units.filter(u=>u.team==t).length;
+function mk(team,x,y,ty){ty=ty||0;return{team,x,y,hp:[100,130,60,200,260,160,120,80][ty],mh:[100,130,60,200,260,160,120,80][ty],ty,rng:[20,20,48,25,70,52,42,30][ty],cw:[1,1.5,.4,0,0,0,0,0][ty],bh:0,spd:(16+Math.random()*6)*[1,1.5,.7,.85,.75,1,1.15,1.4][ty],dps:(10+Math.random()*4)*[1,1.3,.9,.3,1.8,1.2,1,.8][ty],cdn:3,f:null,sea:!inLand(x,y),seaT:0,ld:0,guard:false,hx:x,hy:y,line:null,cd:0,path:null,pi:0,ob:-1,gk:-2,idle:0,xing:false,idl:0,org:100,sup:1,rtr:0,rp:null,px:x,py:y,rout:0,stk:0,sd:1,tp:null,tc:-1}}
+const rty=()=>{const r=Math.random();return r<.55?0:r<.8?1:2};
+function addU(team,x,y,landOnly,ty){if(S.units.some(u=>Math.hypot(u.x-x,u.y-y)<6)||(landOnly&&!inLand(x,y))||((ty||0)>=3&&inLand(x,y)))return false;S.units.push(mk(team,x,y,ty));return true}
+function setTy(t){S.ut=t;ui()}
+function erase(p,r){S.units=S.units.filter(u=>Math.hypot(u.x-p.x,u.y-p.y)>r)}
+
+/* 実況 */
+const Q=[];let qT=0;
+function say(m,t,low){if(low&&Q.length)return;Q.push({m,t:t==null?-1:t});if(Q.length>4)Q.shift()}
+function castTick(){const now=performance.now();if(Q.length&&now-qT>2300){const q=Q.shift();qT=now;$('#ct').textContent=q.m;$('#cast').style.borderLeftColor=q.t<0?'var(--acc)':V(q.t)}}
+const nearName=(x,y)=>{let b='',bd=80*80;CITY2.forEach(c=>{const d=(c.x-x)**2+(c.y-y)**2;if(d<bd){bd=d;b=c.n}});return b};
+function setCast(m){Q.length=0;qT=performance.now();$('#ct').textContent=m;$('#cast').style.borderLeftColor='var(--acc)'}
+
+/* 初期の勢力圏：一番近い首都・陸の師団の色になる */
+function terr(){
+  const A=[[CAPS[0].x,CAPS[0].y,0],[CAPS[1].x,CAPS[1].y,1]];
+  S.units.forEach(u=>{if(!u.sea)A.push([u.x,u.y,u.team])});
+  S.own=CELLS.map(c=>{let b=0,bd=1e12;A.forEach(a=>{const d=(a[0]-c.x)**2+(a[1]-c.y)**2;if(d<bd){bd=d;b=a[2]}});return b});
+  S.prog=CELLS.map(()=>0);S.dirty=true;
+}
+const touch=()=>{terr();draw();ui()};
+
+const svg=$('#svg');
+const pt=e=>{const q=svg.createSVGPoint();q.x=e.clientX;q.y=e.clientY;return q.matrixTransform(svg.getScreenCTM().inverse())};
+let down=false,lastP=null,prev=0;
+function paint(e,first){
+  const p=pt(e);
+  if(S.mode>=3){if(first&&inLand(p.x,p.y)){CAPS[S.mode-3]={x:p.x,y:p.y};touch()}return}
+  if(!first&&lastP&&Math.hypot(p.x-lastP.x,p.y-lastP.y)<13)return;
+  lastP=p;if(S.mode==2)erase(p,12);else addU(S.mode,p.x,p.y,false,S.ut);touch();
+}
+svg.addEventListener('pointerdown',e=>{if(S.phase!='setup'||e.button!=0)return;e.preventDefault();down=true;svg.setPointerCapture(e.pointerId);paint(e,true)});
+svg.addEventListener('pointermove',e=>{if(down)paint(e)});
+['pointerup','pointercancel'].forEach(n=>svg.addEventListener(n,()=>{down=false}));
+svg.addEventListener('contextmenu',e=>{e.preventDefault();if(S.phase=='setup'){erase(pt(e),14);touch()}});
+
+function sample(){
+  S.units=[];
+  const B=[[132.4,34.5],[131.4,34.2],[131.9,34.6],[133.0,35.3],[133.9,34.95],[134.6,35.2],[135.0,34.9],[135.6,35.4],[135.2,35.5],[130.4,33.6],[133.6,33.4]];
+  const R=[[140.9,38.3],[139.9,36.6],[138.2,36.65],[138.4,35.0],[138.0,35.3],[138.0,36.9],[139.0,37.9],[140.1,39.7],[140.7,40.8],[141.35,43.1],[140.7,41.7]];
+  [B,R].forEach((A,t)=>A.forEach(a=>{const[x,y]=P(a[0],a[1]);addU(t,x,y,true,rty());for(let r=0;r<(t==0?2:1);r++)for(let k=0;k<8;k++){const n=S.units.length;addU(t,x+(Math.random()-.5)*50,y+(Math.random()-.5)*50,true,rty());if(S.units.length>n)break}}));
+  [[135.2,33.0,3],[134.4,33.1,4],[133.6,32.6,5],[135.8,33.0,6],[134.9,32.6,7]].forEach(a=>{const[x,y]=P(a[0],a[1]);addU(0,x,y,false,a[2])});
+  [[141.8,35.0,3],[141.9,36.0,4],[141.6,34.3,5],[142.0,37.2,6],[141.8,38.0,7]].forEach(a=>{const[x,y]=P(a[0],a[1]);addU(1,x,y,false,a[2])});
+  touch();
+}
+function clearAll(){S.units=[];touch()}
+function setMode(m){S.mode=m;ui()}
+function lvl(){S.lv=(S.lv+1)%5;ui()}
+function start(){
+  if(!cnt(0)||!cnt(1))return;
+  S.snap=S.units.map(u=>({...u,f:null,line:null,path:null,rp:null}));S.cs0=[{...CAPS[0]},{...CAPS[1]}];
+  S.units.forEach(u=>{u.line=null;u.path=null;u.cd=0;u.hx=u.x;u.hy=u.y;u.guard=false;u.gk=-2;u.ob=-1;u.idle=0;u.rout=0;u.stk=0;u.px=u.x;u.py=u.y;u.org=100;u.rtr=0;u.rp=null;u.sup=1});
+  terr();
+  Object.assign(S,{phase:'battle',paused:false,t:0,win:-1,why:'',fx:[],cp:[0,0],rt:[INT[S.lv],INT[S.lv]],co:[0,0],coCd:[0,0],hh:[],mor:[100,100],cos:[0,0],ml:[0,0],p:[50,50],dg:[0,0],domT:[0,0],zk:0,Z:1,capT:CAPT,p0:[0,1].map(o=>S.own.filter(x=>x==o).length/S.own.length*100),xs:[false,false],rf:[1,1],A:[50,50],air:[.5,.5],at:[4,6],sea:[.5,.5],as:[0,0],ss:[0,0],fs:['advance','advance'],fst:[0,0],fcd:[0,0],fm:[0,0],fa:[{x:1,y:0},{x:-1,y:0}],fpts:[[],[]],sup:[null,null],cutN:[0,0],cutSay:[0,0],cm:[0,0],cs:[null,null],ev:[],nk:0,nkCd:0,oldc:[[],[]],sp:[0,0],pt:0,ft:0,ct:0,idle:0,dc:0,lastFlip:0,landCd:[0,0],stale:false,lead:-1,mil:[0,0],sg:[false,false],lc:[0,0],def:dd(),fl:[]});
+  initRoles();fleetInit();setCast('開戦！ 両軍の師団が動き出した。');
+  ui();prev=performance.now();requestAnimationFrame(loop);
+}
+function back(){S.phase='setup';S.units=S.snap.map(u=>({...u}));CAPS[0]={...S.cs0[0]};CAPS[1]={...S.cs0[1]};S.sup=[null,null];S.fpts=[[],[]];S.fx=[];S.cp=[0,0];S.def=dd();S.fl=[];setCast('配置フェーズ。師団を置いたら「戦闘開始」！');touch()}
+function again(){CAPS[0]={...S.cs0[0]};CAPS[1]={...S.cs0[1]};S.units=S.snap.map(u=>({...u}));start()}
+function pause(){S.paused=!S.paused;ui()}
+function speed(){S.speed=S.speed==1?2:S.speed==2?4:1;ui()}
+function finish(w,why){S.phase='over';S.win=w;S.why=why;say(w<0?'両軍とも力尽きた…相打ち！':`決着！ ${NM[w]}の勝利！ ${why}`,w<0?-1:w);ui()}
+
+function spawn(t,N,atk){
+  const c=CAPS[t];
+  for(let i=0;i<N;i++){
+    if(cnt(t)>=MAXU+(atk?10:0))break;
+    let x=c.x,y=c.y;
+    for(let k=0;k<10;k++){const a=c.x+(Math.random()-.5)*34,b=c.y+(Math.random()-.5)*34;if(inLand(a,b)){x=a;y=b;break}}
+    const u=mk(t,x,y,rty());S.units.push(u);if(atk){u.guard=false;u.gk=-2;pickObj(u)}else role(u);
+  }
+  S.fx.push({x:c.x,y:c.y-26,t:0,d:1.8,team:t,txt:'増援'});
+}
+/* 役割：首都守備隊(5)・各都市の守備隊(2)・攻撃部隊（首都中心に、たまに他の都市も狙う） */
+const nearCap=c=>CAPS.some(p=>Math.hypot(p.x-c.x,p.y-c.y)<40);
+function pickCity(t,from){
+  const cand=[];CITY2.forEach((c,k)=>{if(S.own[CC[k]]!=t&&!nearCap(c))cand.push(k)});
+  if(!cand.length)return -1;
+  cand.sort((a,b)=>Math.hypot(CITY2[a].x-from.x,CITY2[a].y-from.y)-Math.hypot(CITY2[b].x-from.x,CITY2[b].y-from.y));
+  return cand[Math.floor(Math.random()*Math.min(4,cand.length))];
+}
+function pickObj(u,anyIsl){
+  const t=u.team,isl=u.sea?-1:island(u.x,u.y),any=u.sea||isl<0||anyIsl;
+  const cand=[];CITY2.forEach((c,k)=>{if(S.own[CC[k]]!=t&&!nearCap(c)&&(any||CITYI[k]==isl))cand.push(k)});
+  if((any||island(CAPS[1-t].x,CAPS[1-t].y)==isl)&&(Math.random()<.6||!cand.length)){u.ob=-1;return}
+  if(cand.length){cand.sort((a,b)=>Math.hypot(CITY2[a].x-u.x,CITY2[a].y-u.y)-Math.hypot(CITY2[b].x-u.x,CITY2[b].y-u.y));u.ob=cand[Math.floor(Math.random()*Math.min(4,cand.length))];return}
+  let b=-1,bd=1e12;CELLS.forEach((c,i)=>{if(S.own[i]!=t&&CI[i]==isl){const d=(c.x-u.x)**2+(c.y-u.y)**2;if(d<bd){bd=d;b=i}}});
+  if(b>=0){u.ob=-3;u.tc=b;u.tp={x:CELLS[b].x,y:CELLS[b].y}}else if(!anyIsl&&!u.sea){u.xing=true;pickObj(u,true)}else u.ob=-4;
+}
+function needCity(t){
+  let b=-1,bd=1e12;const en=CAPS[1-t];
+  CITY2.forEach((c,k)=>{
+    if(S.own[CC[k]]!=t||nearCap(c))return;
+    if(S.units.filter(u=>u.team==t&&u.guard&&u.gk==k).length>=CGN)return;
+    const d=Math.hypot(c.x-en.x,c.y-en.y);if(d<bd){bd=d;b=k}
+  });
+  return b;
+}
+function role(u){
+  const t=u.team;
+  if(S.units.filter(v=>v.team==t&&v.guard&&v.gk==-1).length<CAPG){u.guard=true;u.gk=-1;u.hx=u.x;u.hy=u.y;return}
+  if(S.sp[t]++%2==0){const k=needCity(t);if(k>=0){u.guard=true;u.gk=k;u.hx=CITY2[k].x;u.hy=CITY2[k].y;return}}
+  u.guard=false;u.gk=-2;pickObj(u);
+}
+function initRoles(){
+  for(let t=0;t<2;t++){
+    const c=CAPS[t],L=S.units.filter(u=>u.team==t&&!u.sea);
+    L.sort((a,b)=>Math.hypot(a.x-c.x,a.y-c.y)-Math.hypot(b.x-c.x,b.y-c.y));
+    L.slice(0,CAPG).forEach(u=>{if(Math.hypot(u.x-c.x,u.y-c.y)<90){u.guard=true;u.gk=-1}});
+    let gl=Math.floor(L.length*.2);
+    CITY2.forEach((cy,k)=>{
+      if(gl<=0||S.own[CC[k]]!=t||nearCap(cy))return;
+      L.filter(u=>!u.guard&&Math.hypot(u.x-cy.x,u.y-cy.y)<50).sort((a,b)=>Math.hypot(a.x-cy.x,a.y-cy.y)-Math.hypot(b.x-cy.x,b.y-cy.y)).slice(0,Math.min(CGN,gl)).forEach(u=>{u.guard=true;u.gk=k;u.hx=cy.x;u.hy=cy.y;gl--});
+    });
+    L.forEach(u=>{if(!u.guard)pickObj(u)});
+  }
+}
+/* 上陸作戦：増援が海に集結し、敵首都（または他の都市）に近い海岸まで航行して上陸する */
+function landing(t,sz){
+  const n=Math.min(LSIZ[sz],MAXU+(sz==4?25:0)-cnt(t));if(n<3)return;
+  S.landCd[t]=S.t+(sz==4?18:25);
+  const own=CAPS[t],k0=(sz==4||(sz==3&&Math.random()<.7)||Math.random()<.5)?-1:pickCity(t,own),en=k0>=0?CITY2[k0]:CAPS[1-t];
+  const cand=SEAC.slice().sort((a,b)=>Math.hypot(a.x-own.x,a.y-own.y)-Math.hypot(b.x-own.x,b.y-own.y)).slice(0,3);
+  let sc=cand[0],path=null;
+  for(const c of cand){
+    const par=bfs(c.i);let best=-1,bd=1e12;
+    SEAC.forEach(k=>{if(par[k.i]!=-2){const d=Math.hypot(k.x-en.x,k.y-en.y);if(d<bd){bd=d;best=k.i}}});
+    if(best>=0){const pts=[];let k=best;while(k>=0){pts.push([(k%GW)*GS+5,((k/GW)|0)*GS+5]);k=par[k]}pts.reverse();path=pts.filter((_,i)=>i%2==0||i==pts.length-1);sc=c;break}
+  }
+  const lu=[];
+  const near=SEAC.slice().sort((a,b)=>Math.hypot(a.x-sc.x,a.y-sc.y)-Math.hypot(b.x-sc.x,b.y-sc.y));
+  for(let k=0;k<n;k++){const c=near[k%near.length],u=mk(t,c.x+(Math.random()-.5)*4,c.y+(Math.random()-.5)*4,rty());if(path){u.path=path.map(p=>p.slice());u.pi=0}u.ob=k0;u.hp=u.mh=Math.round(u.mh*1.4);S.units.push(u);lu.push(u)}
+  S.ev.push({k:'land',t,end:S.t+35,units:lu,n:lu.length});
+  S.fx.push({x:sc.x,y:sc.y-14,t:0,d:2.2,team:t,txt:'上陸作戦'});
+  say(`【上陸作戦・${SCN[sz]}】${NM[t]}が${sz==4?'決死の覚悟で':''}増援${n}個師団を輸送艦隊に乗せて出撃！ 目標は${k0>=0?CITY2[k0].n:NM[1-t]+'の首都'}周辺。`,t);
+}
+function releaseGuards(t,msg,capToo){let n=0;S.units.forEach(u=>{if(u.team==t&&u.guard&&!u.sea&&(capToo||u.gk>=0)){u.guard=false;u.gk=-2;pickObj(u);n++}});if(n&&msg)say(msg,t)}
+
+/* 防衛線：首都の前（自動）／師団が集まったとき50%の確率で好きな場所に（自動） */
+function landSlot(c,a,R){for(let r=R;r>=10;r-=5){const x=c.x+Math.cos(a)*r,y=c.y+Math.sin(a)*r;if(inLand(x,y))return{x,y}}return{x:c.x,y:c.y}}
+const nrm=a=>{while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return a};
+function layout(c,dir,rec,R0,src,end){
+  const slots=[];
+  for(let ring=0;slots.length<rec.length&&ring<8;ring++){
+    const R=R0+ring*12,n=Math.min(Math.max(3,Math.floor(R*2.6/12)),rec.length-slots.length);
+    for(let k=0;k<n;k++){const a=dir+(n==1?0:(k/(n-1)-.5)*2.6);slots.push({...landSlot(c,a,R),a:nrm(a-dir),src,end})}
+  }
+  const ua=u=>nrm(Math.atan2(u.y-c.y,u.x-c.x)-dir);
+  rec.sort((p,q)=>ua(p)-ua(q));slots.sort((p,q)=>p.a-q.a);
+  rec.forEach((u,i)=>{u.line=slots[i]||null});
+}
+function enemyLineNear(t,x,y){const r=170;return S.fl.some(l=>l.t!=t&&l.pts.some(p=>Math.hypot(p[0]-x,p[1]-y)<r))||S.units.some(u=>u.team!=t&&u.line&&Math.hypot(u.line.x-x,u.line.y-y)<r)}
+function freeLines(){
+  for(let t=0;t<2;t++){
+    if(S.co[t]>S.t)continue;
+    const pool=S.units.filter(u=>u.team==t&&!u.sea&&!u.line&&!u.guard&&u.cd<=0),seen=new Set();
+    for(const s of pool){
+      if(seen.has(s))continue;
+      const cl=[s];seen.add(s);
+      for(let i=0;i<cl.length;i++)pool.forEach(v=>{if(!seen.has(v)&&Math.hypot(v.x-cl[i].x,v.y-cl[i].y)<26){seen.add(v);cl.push(v)}});
+      if(cl.length<4)continue;
+      cl.forEach(u=>u.cd=10);
+      const cx=cl.reduce((a,u)=>a+u.x,0)/cl.length,cy=cl.reduce((a,u)=>a+u.y,0)/cl.length;
+      let en=null,ed=260;S.units.forEach(v=>{if(v.team!=t&&!v.sea){const d=Math.hypot(v.x-cx,v.y-cy);if(d<ed){ed=d;en=v}}});
+      if(!en||enemyLineNear(t,cx,cy)||S.own[cellOf(cx,cy)]!=t||S.units.filter(u=>u.team==t&&u.line).length>S.units.filter(u=>u.team==t&&!u.sea).length*.4||S.units.filter(v=>v.team!=t&&!v.sea&&Math.hypot(v.x-cx,v.y-cy)<150).length<2||Math.random()>=.5)continue;
+      const c={x:cx,y:cy},dir=Math.atan2(en.y-cy,en.x-cx),end=S.t+10;
+      layout(c,dir,cl,22,'free',end);
+      const pts=[];for(let k=0;k<=8;k++){const p=landSlot(c,dir+(k/8-.5)*2.6,22);pts.push([p.x,p.y])}
+      S.fl.push({t,pts,end});
+      const nn=nearName(cx,cy);S.ev.push({k:'def',t,end,units:cl.slice(),n:cl.length,c0:S.own.filter(o=>o==t).length,nn});
+      say(`${NM[t]}が${nn?nn+'付近に':''}防衛線を構築！（体力3倍・攻撃力-20%）`,t);
+    }
+  }
+}
+function danger(t){
+  const c=CAPS[t];let d=0;
+  const en=S.units.filter(u=>u.team!=t&&!u.sea&&Math.hypot(u.x-c.x,u.y-c.y)<190).length;
+  if(en)d++;if(en>=4)d++;
+  if(S.cp[t]>0)d+=3;if(S.cp[t]>S.capT*.5)d+=3;
+  const q=S.p[t],o=S.hh.length>=6?S.hh[S.hh.length-6].p[t]:q,ls=S.p0[t]-q;
+  if(ls>8)d++;if(ls>16)d++;if(ls>26)d+=2;if(q<o-6)d++;
+  if(S.mor[t]<40)d++;if(S.mor[t]<25)d++;
+  return d;
+}
+const scaleOf=d=>d>=8?4:d>=5?3:d>=3?2:d>=1?1:0;
+function counter(t,sc){
+  const C=CO[sc];
+  S.co[t]=S.t+C.d;S.coCd[t]=S.t+C.d+(sc==4?20:30);S.cos[t]=sc;S.cs[t]={c0:S.own.filter(o=>o==t).length,end:S.t+C.d,sc,cm0:S.cm[1-t]};
+  S.units.forEach(u=>{if(u.team==t)u.line=null});S.fl=S.fl.filter(l=>l.t!=t);S.def[t].on=false;S.def[t].cool=S.t+C.d;
+  if(sc==4){releaseGuards(t,null,true);const ei=island(CAPS[1-t].x,CAPS[1-t].y);S.units.forEach(u=>{if(u.team==t&&!u.sea){u.ob=-1;if(island(u.x,u.y)!=ei)u.xing=true}})}
+  if(S.lv)spawn(t,C.b,true);
+  S.mor[t]=Math.min(100,S.mor[t]+sc*5);
+  say(`【反転攻勢・${SCN[sc]}】${NM[t]}が${sc==4?'決死の覚悟で全軍突撃！':'反撃に転じる！'}（速度+${Math.round((C.sp-1)*100)}%・攻撃+${Math.round((C.at-1)*100)}%${S.lv?'・増援'+C.b+'個師団':''}）`,t);
+}
+/* 士気・危機度の判定 → 反転攻勢／上陸作戦（規模は 小・中・大・特大=決死） */
+function strategy(){
+  const tc=[0,0];S.own.forEach(o=>tc[o]++);const tot=tc[0]+tc[1]||1;S.p=[tc[0]/tot*100,tc[1]/tot*100];
+  strat2();
+  if(S.t>240&&S.t>=S.nkCd&&S.phase=='battle'){
+    const H=S.hh.slice(-20),sp=H.length>=20?Math.max(...H.map(x=>x.p[0]))-Math.min(...H.map(x=>x.p[0])):99;
+    if(sp<2||S.t>600){S.nkCd=S.t+300;nuke(S.p[0]<S.p[1]?0:S.p[1]<S.p[0]?1:Math.floor(Math.random()*2))}
+  }
+  for(let t=0;t<2;t++){
+    const m=S.mor[t],lv=m<12?2:m<45?1:0;
+    if(lv>S.ml[t]){
+      if(lv==1)say(`【士気低下】${NM[t]}の将兵に動揺が広がる…（攻撃力・速度が低下）`,t);
+      else{say(`【士気崩壊】${NM[t]}の部隊が総崩れに！ 一部が潰走を始めた！`,t);S.units.forEach(u=>{if(u.team==t&&!u.guard&&(u.ty||0)<3&&Math.random()<.2&&S.co[t]<=S.t)u.rout=4})}
+      S.ml[t]=lv;
+    }else if(m>60&&S.ml[t]>0){S.ml[t]=0;say(`${NM[t]}の士気が回復した！`,t)}
+    const sc=scaleOf(danger(t));S.dg[t]=sc;
+    if(S.t<12)continue;
+    if(sc>=1&&S.co[t]<=S.t&&S.t>=S.coCd[t])counter(t,sc);
+    if(sc>=2&&S.lv&&S.t>=S.landCd[t])landing(t,sc);
+  }
+}
+function stepLand(u,tx,ty,s){
+  const base=Math.atan2(ty-u.y,tx-u.x);
+  for(const o of[0,.5*u.sd,-.5*u.sd,u.sd,-u.sd,1.6*u.sd,-1.6*u.sd]){
+    const a=base+o,nx=u.x+Math.cos(a)*s,ny=u.y+Math.sin(a)*s;
+    if(inLand(nx,ny)){u.x=nx;u.y=ny;if(o)u.sd=o>0?1:-1;return}
+  }
+}
+function computeSupply(){
+  for(let t=0;t<2;t++){
+    const N=CELLS.length,sup=new Float32Array(N),dist=new Int16Array(N).fill(-1),q=[];
+    let cc=cellOf(CAPS[t].x,CAPS[t].y);
+    if(cc<0||S.own[cc]!=t){let bd=1e12;CELLS.forEach((c,i)=>{if(S.own[i]!=t)return;const d=(c.x-CAPS[t].x)**2+(c.y-CAPS[t].y)**2;if(d<bd){bd=d;cc=i}})}
+    const link=S.sea[t]>=.4;
+    if(cc>=0&&S.own[cc]==t){dist[cc]=0;q.push(cc)}
+    for(let k=0;k<q.length;k++){
+      const c=q[k];
+      CELLS[c].nb.forEach(j=>{if(j>=0&&S.own[j]==t&&dist[j]<0){dist[j]=dist[c]+1;q.push(j)}});
+      if(link)STR[c].forEach(j=>{if(S.own[j]==t&&dist[j]<0){dist[j]=dist[c]+3;q.push(j)}});
+    }
+    q.forEach(c=>{sup[c]=Math.max(.15,1-dist[c]/MAXD)});
+    CITY2.forEach((cy,k)=>{if(S.own[CC[k]]!=t)return;let f=[CC[k]];sup[CC[k]]=Math.max(sup[CC[k]],.7);for(let l=0;l<3;l++){const nx=[];f.forEach(c=>CELLS[c].nb.forEach(j=>{if(j>=0&&S.own[j]==t){if(sup[j]<.7)sup[j]=.7;nx.push(j)}}));f=nx}});
+    let fr=q.slice();
+    for(let lv=1;lv<=3;lv++){const nx=[];fr.forEach(c=>CELLS[c].nb.forEach(j=>{if(j>=0&&S.own[j]!=t&&sup[j]==0){sup[j]=[0,.6,.35,.15][lv];nx.push(j)}}));fr=nx}
+    S.sup[t]=sup;
+    let cn=0;for(let i=0;i<N;i++)if(S.own[i]==t&&sup[i]==0)cn++;
+    if(cn!=S.cutN[t]){S.cutN[t]=cn;S.dirty=true}
+  }
+  S.units.forEach(u=>{if(u.sea){u.sup=.8;return}const i=cellOf(u.x,u.y);u.sup=Math.max(i>=0?S.sup[u.team][i]:0,u.bh>0?.7:0)});
+}
+/* 空爆：爆撃隊が敵の密集部隊や輸送艦隊を狙う */
+function airStep(h){
+  for(let t=0;t<2;t++){
+    const cv=S.units.filter(u=>u.team==t&&u.ty==3);S.A[t]=Math.min(100,S.A[t]+h*(.6+.25*cv.length));cv.forEach(u=>{u.cdn=(u.cdn||3)-h;if(u.cdn<=0){u.cdn=7+Math.random()*3;if(S.A[t]>=5)strikeFrom(t,u.x,u.y,170)}});
+    S.at[t]-=h;
+    if(S.at[t]<=0){S.at[t]=Math.max(3,9/(.4+S.air[t]*1.2))*(.8+Math.random()*.4);if(S.A[t]>=8)strike(t)}
+  }
+}
+function strikeFrom(t,ox,oy,maxD){
+  const E=S.units.filter(u=>u.team!=t&&Math.hypot(u.x-ox,u.y-oy)<maxD);if(!E.length)return;
+  let best=null,bs=-1;
+  E.forEach(u=>{let n=0;E.forEach(v=>{if(v.sea==u.sea&&(v.x-u.x)**2+(v.y-u.y)**2<900)n++});const sc=n+(u.sea?2:0)+Math.random();if(sc>bs){bs=sc;best=u}});
+  let hit=0;
+  E.forEach(v=>{if((v.x-best.x)**2+(v.y-best.y)**2<900){const d=(16+Math.random()*10)*(.6+.8*S.air[t])*(v.line||v.guard?.7:1);v.hp-=d;v.org=Math.max(0,v.org-d*.5);hit++}});
+  S.A[t]=Math.max(0,S.A[t]-3);
+  S.fx.push({bomb:1,x:best.x,y:best.y,x0:ox,y0:oy,t:0,d:1.1,team:t,txt:''});
+  if(hit>=3&&Math.random()<.4){const nn=nearName(best.x,best.y);say(`【艦載機】${NM[t]}の空母機動部隊が${nn?nn+'付近の':''}敵${best.sea?'艦隊':'部隊'}${hit}個師団を爆撃！`,t,true)}
+}
+function strike(t){
+  const E=S.units.filter(u=>u.team!=t);if(!E.length)return;
+  let best=null,bs=-1;
+  E.forEach(u=>{let n=0;E.forEach(v=>{if(v.sea==u.sea&&(v.x-u.x)**2+(v.y-u.y)**2<900)n++});const sc=n+(u.sea?2:0)+(!u.sea&&u.sup<.2?1:0)+Math.random();if(sc>bs){bs=sc;best=u}});
+  const c=CAPS[t];let hit=0;
+  E.forEach(v=>{if((v.x-best.x)**2+(v.y-best.y)**2<900){const d=(16+Math.random()*10)*(.6+.8*S.air[t])*(v.line||v.guard?.7:1);v.hp-=d;v.org=Math.max(0,v.org-d*.5);hit++}});
+  S.A[t]=Math.max(0,S.A[t]-5-(Math.random()<.2?4:0));
+  S.fx.push({bomb:1,x:best.x,y:best.y,x0:c.x,y0:c.y,t:0,d:1.1,team:t,txt:''});
+  if(hit>=3&&Math.random()<.5){const nn=nearName(best.x,best.y);say(`【空爆】${NM[t]}の爆撃隊が${nn?nn+'付近の':''}敵${best.sea?'艦隊':'部隊'}${hit}個師団を爆撃！`,t,true)}
+}
+/* 前線：師団が横並びで前線を形成。崩壊しそうなら組織的に撤退して新しい前線へ */
+function frontStep(){
+  for(let t=0;t<2;t++){
+    const c=CAPS[t],e=CAPS[1-t],L=Math.hypot(e.x-c.x,e.y-c.y)||1,a={x:(e.x-c.x)/L,y:(e.y-c.y)/L};
+    S.fa[t]=a;
+    const A=S.units.filter(u=>u.team==t&&!u.sea&&!u.guard&&!u.line&&!u.xing&&u.rtr<=0&&u.rout<=0);
+    const pr=u=>(u.x-c.x)*a.x+(u.y-c.y)*a.y,ps=A.map(pr).sort((x,y)=>x-y);
+    S.fm[t]=ps.length?ps[ps.length>>1]:0;
+    const F=A.filter(u=>pr(u)>=S.fm[t]).sort((u,v)=>(u.y*a.x-u.x*a.y)-(v.y*a.x-v.x*a.y));
+    S.fpts[t]=F.length>=3?F.map(u=>[u.x,u.y]):[];
+    if(S.fs[t]=='retreat'){S.fst[t]-=.5;if(S.fst[t]<=0){S.fs[t]='hold';S.fst[t]=10;say(`${NM[t]}が新たな前線を構築、態勢を立て直す`,t)}}
+    else if(S.fs[t]=='hold'){S.fst[t]-=.5;if(S.fst[t]<=0){S.fs[t]='advance';S.units.forEach(u=>{if(u.team==t)u.rp=null})}}
+    else if(A.length>=4&&S.t>=S.fcd[t]&&S.t>12&&S.co[t]<=S.t){
+      const fc={x:F.reduce((s,u)=>s+u.x,0)/(F.length||1),y:F.reduce((s,u)=>s+u.y,0)/(F.length||1)};
+      let own=0,en=0;S.units.forEach(u=>{if(u.sea)return;const d=Math.hypot(u.x-fc.x,u.y-fc.y);if(u.team==t&&d<110)own+=u.hp;else if(u.team!=t&&d<130)en+=u.hp});
+      const low=A.filter(u=>u.org<30).length/A.length;
+      if(low>=.5||(en>0&&own/en<.35)){
+        S.fs[t]='retreat';S.fst[t]=5;S.fcd[t]=S.t+60;
+        A.forEach(u=>{let x=u.x-a.x*70,y=u.y-a.y*70;if(!inLand(x,y)){x=u.x-a.x*35;y=u.y-a.y*35}if(!inLand(x,y)){x=u.x;y=u.y}u.rp={x,y}});
+        say(`【前線後退】${NM[t]}の前線が崩壊寸前！ 師団が組織的に撤退し、新たな前線へ下がる`,t);
+      }
+    }
+  }
+}
+/* 作戦の成否判定 */
+function evalEvents(){
+  for(let t=0;t<2;t++){
+    const c=S.cs[t];
+    if(c&&S.t>=c.end){
+      S.cs[t]=null;S.units.forEach(u=>{if(u.team==t&&!u.sea)u.xing=false});const g=S.own.filter(o=>o==t).length-c.c0,ok=g>=Math.max(4,c.sc*3)||S.cm[1-t]>c.cm0;
+      S.mor[t]=Math.max(0,Math.min(100,S.mor[t]+(ok?8+c.sc*2:-8)));
+      say(ok?`【反転攻勢 成功】${NM[t]}が${g}マスを奪い返した！ 士気が上がる`:`【反転攻勢 失敗】${NM[t]}の反撃は実らず…（${g>=0?'+':''}${g}マス） 士気が低下`,t);
+    }
+  }
+  S.ev=S.ev.filter(e=>{
+    if(S.t<e.end)return true;
+    const alive=e.units.filter(u=>S.units.includes(u));
+    if(e.k=='def'){const now=S.own.filter(o=>o==e.t).length,ok=alive.length>=e.n*.7&&now>=e.c0-2;S.mor[e.t]=Math.max(0,Math.min(100,S.mor[e.t]+(ok?4:-5)));say(`【防衛戦 ${ok?'成功':'失敗'}】${NM[e.t]}の${e.nn?e.nn+'付近の':''}防衛線は${ok?'敵を食い止めた':'突破された'}`,e.t)}
+    else{const landed=alive.filter(u=>!u.sea).length,ok=landed>=e.n*.5;S.mor[e.t]=Math.max(0,Math.min(100,S.mor[e.t]+(ok?5:-8)));say(`【上陸作戦 ${ok?'成功':'失敗'}】${NM[e.t]}の上陸部隊 ${landed}/${e.n} 個師団が${ok?'橋頭堡を確保':'壊滅・撃退された'}`,e.t)}
+    return false;
+  });
+}
+function recap(){
+  for(let t=0;t<2;t++){
+    const L=S.oldc[t];if(!L.length)continue;
+    const o=L[L.length-1],ci=cellOf(o.x,o.y);if(ci<0)continue;
+    if(S.own[ci]!=t)o.lost=true;
+    else if(o.lost){
+      const fr=S.units.some(u=>u.team==t&&!u.sea&&Math.hypot(u.x-o.x,u.y-o.y)<20),en=S.units.some(u=>u.team!=t&&!u.sea&&Math.hypot(u.x-o.x,u.y-o.y)<25);
+      if(fr&&!en){
+        L.pop();CAPS[t]={x:o.x,y:o.y};S.cp[t]=0;S.sg[t]=false;S.cm[t]=Math.max(0,S.cm[t]-1);S.mor[t]=Math.min(100,S.mor[t]+15);S.def[t].on=false;S.def[t].cool=S.t+10;
+        S.units.forEach(u=>{if(u.team==t&&u.guard&&u.gk==-1){u.hx=o.x;u.hy=o.y}});
+        say(`【首都奪還】${NM[t]}が旧首都を奪い返し、首都を元に戻した！（士気+15）`,t);
+      }
+    }
+  }
+}
+function strat2(){
+  const nav=t=>10+.1*S.own.filter(o=>o==t).length+S.units.reduce((a,u)=>a+(u.team==t&&u.sea?u.hp/10*[.3,.3,.3,1.3,1.5,1.1,1,.9][u.ty||0]:0),0);
+  const n0=nav(0),n1=nav(1);S.sea=[n0/(n0+n1),n1/(n0+n1)];
+  const a0=S.A[0],a1=S.A[1],as=a0+a1||1;S.air=[a0/as,a1/as];
+  for(let t=0;t<2;t++){
+    if(S.air[t]>.62&&!S.as[t]){S.as[t]=1;say(`【制空権】${NM[t]}が制空権を掌握！ 敵の動きが鈍る`,t)}else if(S.air[t]<.5)S.as[t]=0;
+    if(S.sea[t]>.62&&!S.ss[t]){S.ss[t]=1;say(`【制海権】${NM[t]}が制海権を掌握！ 海上補給線が安定する`,t)}else if(S.sea[t]<.5)S.ss[t]=0;
+  }
+  computeSupply();
+  for(let t=0;t<2;t++){
+    const n=S.units.filter(u=>u.team==t&&!u.sea&&u.sup<.2).length;
+    if(n>=3&&S.t>=S.cutSay[t]){S.cutSay[t]=S.t+20;say(`【包囲・補給断絶】${NM[t]}の${n}個師団が補給を断たれ孤立！ 戦力が大きく低下`,1-t)}
+  }
+  recap();frontStep();evalEvents();
+}
+function posture(){
+  S.units.forEach(u=>{u.isl=u.sea?-1:island(u.x,u.y)});
+  S.units.forEach(u=>{if(u.line&&u.line.src=='free'&&S.t>u.line.end){u.line=null;u.cd=8}});
+  strategy();
+  S.fl=S.fl.filter(l=>l.end>S.t);
+  for(let t=0;t<2;t++){
+    const c=CAPS[t],d=S.def[t];
+    const en=S.units.filter(u=>u.team!=t&&!u.sea),near=en.filter(u=>Math.hypot(u.x-c.x,u.y-c.y)<190),far=en.filter(u=>Math.hypot(u.x-c.x,u.y-c.y)<250);
+    S.units.forEach(u=>{if(u.team==t&&u.line&&u.line.src=='cap')u.line=null});
+    if(S.co[t]>S.t)d.on=false;
+    else if(d.on&&S.t>d.end){d.on=false;d.cool=S.t+8}
+    else if(d.on&&!far.length)d.on=false;
+    else if(!d.on&&near.length&&S.t>=d.cool){d.on=true;d.end=S.t+10;say(`${NM[1-t]}が${NM[t]}の首都に接近！ 首都防衛線を展開！`,t)}
+    d.pts=[];
+    /* 前線部隊が壊滅したら、守備隊も反攻に出る（膠着対策） */
+    if(!S.units.some(u=>u.team==t&&!u.sea&&!u.guard)){if(S.units.some(u=>u.team==t&&u.guard&&u.gk>=0))releaseGuards(t,`${NM[t]}の前線部隊が壊滅！ 各都市の守備隊が反攻に転じる！`);else releaseGuards(t,`${NM[t]}の首都守備隊も反攻に転じる！`,true)}
+    S.units.forEach(u=>{if(u.team!=t||u.sea)return;if(u.guard&&u.gk>=0&&S.own[CC[u.gk]]!=t){u.guard=false;u.gk=-2}if(!u.guard&&((u.ob>=0&&S.own[CC[u.ob]]==t)||(u.ob==-3&&S.own[u.tc]==t)||u.ob==-4))pickObj(u)});
+    if(!d.on)continue;
+    const set=far.length?far:near,mx=set.reduce((s,u)=>s+u.x,0)/set.length,my=set.reduce((s,u)=>s+u.y,0)/set.length,dir=Math.atan2(my-c.y,mx-c.x);
+    for(let k=0;k<=10;k++){const s=landSlot(c,dir+(k/10-.5)*2.6,36);d.pts.push([s.x,s.y])}
+    layout(c,dir,S.units.filter(u=>u.team==t&&!u.sea&&!u.line&&Math.hypot(u.x-c.x,u.y-c.y)<200),36,'cap',0);
+  }
+  S.ft+=.5;if(S.ft>=1){S.ft=0;freeLines()}
+}
+function nuke(t){
+  const e=1-t,R=62;let tx,ty,cap=false;
+  if(S.nk>=1||Math.random()<.4){tx=CAPS[e].x;ty=CAPS[e].y;cap=true}
+  else{let best=null,bs=-1;S.units.forEach(u=>{if(u.team!=e||u.sea)return;let n=0;S.units.forEach(v=>{if(v.team==e&&(v.x-u.x)**2+(v.y-u.y)**2<R*R)n++});if(n>bs){bs=n;best=u}});if(!best){tx=CAPS[e].x;ty=CAPS[e].y;cap=true}else{tx=best.x;ty=best.y}}
+  S.nk++;let k0=0,k1=0;
+  S.units.forEach(u=>{if(Math.hypot(u.x-tx,u.y-ty)<R){u.hp=-1;u.team==t?k0++:k1++}});
+  CELLS.forEach((c,i)=>{if((c.x-tx)**2+(c.y-ty)**2<R*R&&S.own[i]!=t){S.own[i]=t;S.dirty=true;S.lastFlip=S.t}});
+  S.mor[e]=Math.max(0,S.mor[e]-35);S.mor[t]=Math.max(0,S.mor[t]-10);
+  S.fx.push({nuke:1,x:tx,y:ty,R,t:0,d:2.6,team:t,txt:''});
+  const nn=nearName(tx,ty);
+  say(`【核攻撃】膠着を打開するため${NM[t]}が核を使用！ ${cap?NM[e]+'の首都':(nn?nn+'付近':'前線')}が壊滅…（敵${k1}・味方${k0}個師団が消滅）`,t);
+  if(cap&&!relocate(e))finish(t,`${NM[e]}の首都が核攻撃で壊滅`);
+}
+function stepSea(u,tx,ty,s){
+  const base=Math.atan2(ty-u.y,tx-u.x);
+  for(const o of[0,.5*u.sd,-.5*u.sd,u.sd,-u.sd,1.6*u.sd,-1.6*u.sd]){
+    const a=base+o,nx=u.x+Math.cos(a)*s,ny=u.y+Math.sin(a)*s;
+    if(!inLand(nx,ny)){u.x=nx;u.y=ny;if(o)u.sd=o>0?1:-1;return}
+  }
+}
+function seaPath(x,y,tx,ty){
+  let s0=-1,bd=1e12;SEAC.forEach(c=>{const d=(c.x-x)**2+(c.y-y)**2;if(d<bd){bd=d;s0=c.i}});
+  if(s0<0)return null;
+  const par=bfs(s0);let best=-1;bd=1e12;
+  SEAC.forEach(k=>{if(par[k.i]!=-2){const d=(k.x-tx)**2+(k.y-ty)**2;if(d<bd){bd=d;best=k.i}}});
+  if(best<0)return null;
+  const pts=[];let k=best;while(k>=0){pts.push([(k%GW)*GS+5,((k/GW)|0)*GS+5]);k=par[k]}pts.reverse();
+  return pts.filter((_,i)=>i%2==0||i==pts.length-1);
+}
+function fleetPath(u){
+  const e=CAPS[1-u.team],pp=seaPath(u.x,u.y,e.x,e.y);
+  if(pp){u.path=u.ty==3?pp.slice(0,Math.max(2,Math.round(pp.length*.55))):pp;u.pi=0}
+}
+function fleetInit(){S.units.forEach(u=>{if(u.ty>=3&&u.sea)fleetPath(u)})}
+function spawnShip(t){
+  if(S.units.filter(u=>u.team==t&&u.ty>=3).length>=14)return;
+  const r=Math.random(),ty=r<.1?3:r<.25?4:r<.45?5:r<.7?6:7,c=CAPS[t];
+  let b=null,bd=1e12;SEAC.forEach(k=>{const d=(k.x-c.x)**2+(k.y-c.y)**2;if(d<bd){bd=d;b=k}});
+  if(!b)return;
+  const u=mk(t,b.x+(Math.random()-.5)*6,b.y+(Math.random()-.5)*6,ty);u.sea=true;fleetPath(u);S.units.push(u);
+  S.fx.push({x:b.x,y:b.y-14,t:0,d:1.6,team:t,txt:TN[ty]+'就役'});
+}
+function relocate(t){
+  const pr=.5/Math.pow(2,S.cm[t]);
+  if(Math.random()>=pr)return false;
+  const c=CAPS[t],en=CAPS[1-t];let b=-1,bd=-1;
+  CITY2.forEach((k,i)=>{if(S.own[CC[i]]!=t||Math.hypot(k.x-c.x,k.y-c.y)<60)return;const d=Math.hypot(k.x-en.x,k.y-en.y)+(CITYI[i]==island(c.x,c.y)?1e4:0);if(d>bd){bd=d;b=i}});
+  if(b<0)return false;
+  S.oldc[t].push({x:c.x,y:c.y,lost:false});CAPS[t]={x:CITY2[b].x,y:CITY2[b].y};
+  S.cp[t]=0;S.sg[t]=false;S.mor[t]=Math.max(0,S.mor[t]-15);S.def[t].on=false;S.def[t].cool=S.t+10;S.cm[t]++;
+  S.units.forEach(u=>{if(u.team==t&&u.guard&&u.gk==-1){u.hx=CAPS[t].x;u.hy=CAPS[t].y}});
+  say(`【遷都】首都陥落！ ${NM[t]}が${CITY2[b].n}へ遷都して抗戦を続ける！（成功率${Math.round(pr*100)}%、次回は${Math.round(pr*50)}%）`,t);
+  return true;
+}
+function step(h){
+  S.t+=h;
+  S.Z=S.t>ESC0?Math.min(3.5,1+(S.t-ESC0)/70):1;S.capT=Math.max(3,CAPT-Math.max(0,S.t-ESC0)/30);
+  const zk=Math.floor((S.Z-1)*2);if(zk>S.zk){S.zk=zk;say(`戦争が長期化！ 両軍の戦闘が激化している（攻撃力×${S.Z.toFixed(1)}）`,-1)}
+  if(S.lv)for(let t=0;t<2;t++){S.rt[t]-=h;if(S.rt[t]<=0){S.rf[t]=Math.max(.6,Math.min(1.5,S.rf[t]+(1-S.rf[t])*.2+(Math.random()-.5)*.3));const n=Math.max(1,Math.round(NUM[S.lv]*S.rf[t]+Math.random()*2-1));spawn(t,n);if(Math.random()<.25)spawnShip(t);S.rt[t]=INT[S.lv]*(.8+Math.random()*.4);say(`${NM[t]}に増援${n}個師団が到着`,t,true)}}
+  /* 膠着したら：守備隊も前進し、増援が上陸作戦に出る */
+  if(S.lv&&S.t-S.lastFlip>=STALE){
+    if(!S.stale){S.stale=true;say('戦線が膠着！ 両軍とも増援を集めて上陸作戦を準備している…',-1)}
+    for(let t=0;t<2;t++)if(S.t>=S.landCd[t]){releaseGuards(t);landing(t,1+(Math.random()<.5?1:0))}
+  }else S.stale=false;
+  S.pt-=h;if(S.pt<=0){S.pt=.5;posture()}
+  airStep(h);
+  const U=S.units,dm=new Array(U.length).fill(0);
+  U.forEach(u=>{
+    u.f=null;u.ld=Math.max(0,u.ld-h);u.cd=Math.max(0,u.cd-h);u.bh=Math.max(0,(u.bh||0)-h);
+    u.px=u.x;u.py=u.y;
+    if(u.rout>0){u.rout-=h;const c0=CAPS[u.team],d0=Math.hypot(c0.x-u.x,c0.y-u.y);if(d0>6){const s0=Math.min(u.spd*h,d0-6);if(u.sea){u.x+=(c0.x-u.x)/d0*s0;u.y+=(c0.y-u.y)/d0*s0}else stepLand(u,c0.x,c0.y,s0)}return}
+    if(S.co[u.team]>S.t){u.rtr=0;u.rout=0}else if(!u.sea&&!u.guard&&u.org<12&&u.rtr<=0&&u.rout<=0)u.rtr=4;
+    if(u.rtr>0){u.rtr-=h;u.org=Math.min(100,u.org+h*6);const c1=CAPS[u.team],d1=Math.hypot(c1.x-u.x,c1.y-u.y);if(d1>20){const s1=Math.min(u.spd*h,d1-20);if(u.sea){u.x+=(c1.x-u.x)/d1*s1;u.y+=(c1.y-u.y)/d1*s1}else stepLand(u,c1.x,c1.y,s1)}return}
+    const fsT=(!u.guard&&!u.line&&!u.sea&&!u.xing)?S.fs[u.team]:'advance';
+    let coh=1;if(fsT=='advance'&&!(S.co[u.team]>S.t&&S.cos[u.team]==4)&&!u.guard&&!u.line&&!u.sea&&!u.xing){const a=S.fa[u.team],c0=CAPS[u.team];if((u.x-c0.x)*a.x+(u.y-c0.y)*a.y>S.fm[u.team]+40)coh=.5}
+    const home=u.line||(fsT!='advance'?(u.rp||{x:u.x,y:u.y}):{x:u.hx,y:u.hy}),hold=u.line||u.guard||fsT=='hold',lim=u.line?80:fsT=='hold'?70:GR,cof=S.co[u.team]>S.t&&!u.guard,cc=cof?CO[S.cos[u.team]]:null,ag=cc?AG[S.cos[u.team]]:AGGRO;
+    const mo=S.mor[u.team],mf=mo>=60?1:mo>=35?.9:mo>=15?.75:.6,af=1-Math.max(0,S.air[1-u.team]-.55)*.5,cut=!u.sea&&u.sup<.2;
+    const spf=(cc?cc.sp:1)*(.6+.4*mf)*(u.ty==1?.5+.5*u.sup:.7+.3*u.sup)*af,atf=mf*S.Z*(cc?cc.at:1)*(.5+.5*u.sup)*(cut?.5:1)*(.6+.4*u.org/100)*af*(u.sea&&S.sea[u.team]>.55?1.2:1);
+    let near=-1,nd=1e12,sd=-1,sdd=(u.ty>=3?Math.max(ag,200):ag)**2;
+    U.forEach((v,j)=>{
+      if(v.team==u.team)return;
+      const d=(v.x-u.x)**2+(v.y-u.y)**2;
+      if(d<nd){nd=d;near=j}
+      if(v.sea==u.sea&&(u.sea||v.isl===u.isl)&&d<sdd&&(!hold||Math.hypot(v.x-home.x,v.y-home.y)<lim)){sdd=d;sd=j}
+    });
+    if(near>=0&&nd<=u.rng*u.rng){const v=U[near];dm[near]+=u.dps*h*(v.sea==u.sea?1:(u.ty>=3&&u.ty<=6?.7:.5))*(u.ld>0?.6:1)*(u.line?LATK:1)*atf*((TM[u.ty||0]&&TM[u.ty||0][v.ty||0])||1)*(u.ty==7&&v.sea&&v.ty<3?1.3:1);u.f=v}
+    if(u.line&&u.line.src=='free'){if(sd<0){u.idle+=h;if(u.idle>5){u.line=null;u.cd=8;u.idle=0}}else u.idle=0}
+    if(!u.sea&&!u.xing){if(u.ob==-4){u.idl+=h;if(u.idl>10){u.xing=true;u.idl=0;pickObj(u,true);if(!S.xs[u.team]){S.xs[u.team]=true;say(`${NM[u.team]}の孤立した部隊が海を渡って進軍を開始！`,u.team)}}}else u.idl=0}
+    let tx,ty,stop,eng=false;
+    if(fsT=='retreat'&&u.rp){tx=u.rp.x;ty=u.rp.y;stop=3}
+    else if(sd>=0){tx=U[sd].x;ty=U[sd].y;stop=u.rng*.85;eng=sdd<=u.rng*u.rng}
+    else if(u.path){const w=u.path[u.pi];tx=w[0];ty=w[1];stop=2;if(Math.hypot(tx-u.x,ty-u.y)<9){u.pi++;if(u.pi>=u.path.length)u.path=null}}
+    else if(hold){tx=home.x;ty=home.y;stop=4}
+    else if(u.ty>=3){tx=u.x;ty=u.y;stop=0}
+    else{const e=(S.co[u.team]>S.t&&S.cos[u.team]==4)?CAPS[1-u.team]:u.ob>=0?CITY2[u.ob]:u.ob==-1?CAPS[1-u.team]:u.ob==-3?u.tp:null;if(e){tx=e.x;ty=e.y;stop=6}else{tx=u.x;ty=u.y;stop=0}}
+    const d=Math.hypot(tx-u.x,ty-u.y);
+    if(!eng&&d>stop){
+      const s=Math.min(u.spd*h*(u.sea?1.4:1)*spf*coh,d-stop);
+      if(u.sea&&u.ty>=3)stepSea(u,tx,ty,s);
+      else if(u.sea||u.xing){u.x+=(tx-u.x)/d*s;u.y+=(ty-u.y)/d*s}
+      else{stepLand(u,tx,ty,s);if(!hold){if(Math.hypot(u.x-u.px,u.y-u.py)<s*.3)u.stk+=h;else u.stk=0;if(u.stk>3){u.stk=0;pickObj(u)}}}
+    }
+  });
+  U.forEach((u,i)=>{const dmg=dm[i]/(u.line?LHP:1)*(!u.sea&&u.sup<.2?1.6:1);u.hp-=dmg;u.org=Math.max(0,Math.min(100,u.org-dmg*.25+h*(u.sup>=.5?1.5*u.sup:-1.5*(1-u.sup))))});
+  for(let i=0;i<U.length;i++)for(let j=i+1;j<U.length;j++){
+    const a=U[i],b=U[j];let dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy);
+    if(d<8){if(d<.01){dx=Math.random()-.5;dy=Math.random()-.5;d=Math.hypot(dx,dy)||1}const k=(8-d)/2/d;a.x-=dx*k;a.y-=dy*k;b.x+=dx*k;b.y+=dy*k}
+  }
+  U.forEach(u=>{
+    let on=inLand(u.x,u.y);if(u.sea&&on&&u.ty>=3){u.x=u.px;u.y=u.py;on=false}
+    if(u.sea&&on){u.sea=false;u.path=null;if(u.xing){u.xing=false;if(!u.guard)pickObj(u)}if(u.seaT>=1.5){u.bh=45;u.ld=4;S.lc[u.team]++;S.fx.push({x:u.x,y:u.y-10,t:0,d:1.5,team:u.team,txt:'上陸'})}u.seaT=0}
+    else if(!u.sea&&!on){if(u.xing){u.sea=true;u.seaT=0}else{u.x=u.px;u.y=u.py}}
+    else if(u.sea)u.seaT+=h;
+    if(u.hp<=0){if(u.ty>=3)say(`${NM[u.team]}の${TN[u.ty]}が撃沈された！`,1-u.team,true);S.dc++;S.mor[u.team]=Math.max(0,S.mor[u.team]-.7);S.fx.push({x:u.x,y:u.y,t:0,d:1.2,team:u.team,txt:'✕'})}
+  });
+  S.units=U.filter(u=>u.hp>0);
+  S.fx.forEach(f=>f.t+=h);S.fx=S.fx.filter(f=>f.t<f.d);
+  /* 領土の占領：陸の師団が立っているマスが塗り替わる */
+  const n=[CELLS.map(()=>0),CELLS.map(()=>0)];
+  S.units.forEach(u=>{if(u.sea)return;CELLS.forEach((c,i)=>{if((c.x-u.x)**2+(c.y-u.y)**2<169)n[u.team][i]+=u.cw||1})});
+  CELLS.forEach((c,i)=>{
+    const a=n[0][i],b=n[1][i];if(a&&b)return;
+    const t=a?0:b?1:-1;
+    if(t>=0&&S.own[i]!=t){S.prog[i]+=h*Math.min(3,n[t][i])*S.Z;if(S.prog[i]>=CT){const lo=S.own[i];S.mor[lo]=Math.max(0,S.mor[lo]-1.2-(CITYAT[i]?6:0));S.mor[t]=Math.min(100,S.mor[t]+.4);S.own[i]=t;S.prog[i]=0;S.dirty=true;S.lastFlip=S.t;if(CITYAT[i])say(`${CITYAT[i]}が${NM[t]}に占領された！`,t)}}
+    else S.prog[i]=Math.max(0,S.prog[i]-h*.5);
+  });
+  for(let t=0;t<2;t++){
+    const c=CAPS[t];let en=0,fr=0;
+    let tch=false;S.units.forEach(u=>{if(u.sea)return;const d=Math.hypot(u.x-c.x,u.y-c.y);if(u.team==t){if(d<CAPR*1.6)fr++}else{if(d<CAPR)en++;if(d<CTOUCH)tch=true}});
+    S.cp[t]=en*2;if(en>0&&fr==0)S.mor[t]=Math.max(0,S.mor[t]-1.5*h);
+    if(S.cp[t]>.3&&!S.sg[t]){S.sg[t]=true;say(`${NM[1-t]}が${NM[t]}の首都を包囲！ 陥落寸前！`,1-t)}
+    if(S.cp[t]<=0&&S.sg[t]){S.sg[t]=false;S.mor[t]=Math.min(100,S.mor[t]+8);S.mor[1-t]=Math.max(0,S.mor[1-t]-6);say(`【首都攻城戦 防衛成功】${NM[t]}が首都を守り抜き、${NM[1-t]}の包囲は失敗！`,t)}
+    if(tch){if(relocate(t))continue;return finish(1-t,`${NM[t]}の首都に触れて占領（遷都に失敗）`)}
+  }
+  for(let t=0;t<2;t++)S.mor[t]=Math.min(100,S.mor[t]+(.35+(S.co[t]>S.t?.8:0))*h);
+  S.ct+=h;
+  if(S.ct>=3){
+    S.ct=0;
+    if(S.dc>=6)say(`各地で激戦！ ここ数秒で${S.dc}個師団が壊滅！`,-1);
+    S.dc=0;
+    for(let t=0;t<2;t++)if(S.lc[t]>=3){say(`${NM[t]}の上陸部隊が${S.lc[t]}個師団、上陸に成功！`,t);S.lc[t]=0}
+    const tc=[0,0];S.own.forEach(o=>tc[o]++);const tot=tc[0]+tc[1],p=[Math.round(tc[0]/tot*100),Math.round(tc[1]/tot*100)];
+    for(let t=0;t<2;t++)for(const m of[60,70,80,90])if(p[t]>=m&&S.mil[t]<m){S.mil[t]=m;say(`${NM[t]}が領土の${m}%を掌握！`,t)}
+    const ld=p[0]-p[1]>6?0:p[1]-p[0]>6?1:-1;
+    if(ld>=0){if(S.lead>=0&&S.lead!=ld)say(`領土で逆転！ ${NM[ld]}が優勢に！`,ld);S.lead=ld}
+    S.hh.push({p});if(S.hh.length>24)S.hh.shift();
+    for(let t=0;t<2;t++){
+      if(p[t]<45&&Math.random()<.07){const ev=['補給が滞り将兵が疲弊','敵の宣伝ビラで厭戦気分が広がり','将校の離反の噂が流れ','相次ぐ後退で将兵の不安が高まり'][Math.floor(Math.random()*4)];S.mor[t]=Math.max(0,S.mor[t]-12);say(`【士気低下】${NM[t]}で${ev}…（士気-12）`,t)}
+    }
+    S.idle+=3;
+    if(S.idle>=9){S.idle=0;say(`戦況：領土 ${NM[0]} ${p[0]}% 対 ${NM[1]} ${p[1]}%、師団 ${cnt(0)} 対 ${cnt(1)}。`,-1,true)}
+  }
+  const a=cnt(0),b=cnt(1);
+  if((!a||!b)&&!S.lv)finish(a?0:b?1:-1,'敵軍を殲滅');
+}
+function loop(ts){
+  if(S.phase!='battle')return;
+  const dt=Math.min(.05,(ts-prev)/1000);prev=ts;
+  if(!S.paused){let r=dt*S.speed;while(r>0&&S.phase=='battle'){const h=Math.min(.05,r);step(h);r-=h}}
+  draw();
+  if(S.phase=='battle')requestAnimationFrame(loop);
+}
+
+function renderT(){
+  const p=['','','',''],bd=[];
+  CELLS.forEach((c,i)=>{
+    const o=S.own[i],cutc=S.sup[o]&&S.sup[o][i]==0;p[o+(cutc?2:0)]+=hexD(c);
+    c.nb.forEach((j,d)=>{if(j>i&&S.own[j]!=o)bd.push(`M${hv(c,60*d-30).join(',')}L${hv(c,60*d+30).join(',')}`)});
+  });
+  $('#T').innerHTML=[0,1,2,3].map(t=>`<path d="${p[t]}" style="fill:${V(t%2)};stroke:${V(t%2)}" fill-opacity="${t<2?.34:.1}" stroke-opacity="${t<2?.34:.1}" stroke-width=".8"/>`).join('')
+    +`<path d="${bd.join('')}" fill="none" style="stroke:var(--ink)" stroke-opacity=".55" stroke-width="1.3" stroke-linecap="round"/>`;
+}
+function ship(u){
+  const F='style="fill:var(--c)" stroke="#fff" stroke-width=".8"',T=x=>`<circle cx="${x}" cy="-3" r="2.3" ${F}/>`;
+  switch(u.ty){
+    case 3:return `<path d="M-13,-1L13,-1L10,5L-10,5Z" ${F}/><rect x="-12" y="-3.6" width="24" height="2.6" fill="#fff" fill-opacity=".9"/><rect x="3" y="-8" width="4" height="4.4" ${F}/>`;
+    case 4:return `<path d="M-12,-1L12,-1L9,5L-9,5Z" ${F}/>${T(-6)}${T(0)}${T(6)}<rect x="-1.5" y="-8" width="3" height="4" ${F}/>`;
+    case 5:return `<path d="M-10,-1L10,-1L7,5L-7,5Z" ${F}/>${T(-4)}${T(4)}<rect x="-1" y="-7" width="2.4" height="3.4" ${F}/>`;
+    case 6:return `<path d="M-9,-1L9,-1L6,5L-6,5Z" ${F}/>${T(-3)}<rect x="3" y="-6" width="3" height="5" ${F}/>`;
+    case 7:return `<path d="M-8,0L8,0L6,4L-6,4Z" ${F}/><path d="M0,0L0,-7" stroke="#fff" stroke-width="1.1"/>`;
+    default:return `<path d="M-9,-1L9,-1L6,5L-6,5Z" ${F}/><path d="M0,-1L0,-8L5,-4L0,-4" style="fill:var(--c)" stroke="#fff" stroke-width=".6"/>`;
+  }
+}
+function draw(){
+  if(S.dirty){renderT();S.dirty=false}
+  let h='';
+  const ln=(pts,t)=>{if(pts.length>1){h+=`<polyline points="${pts.map(q=>q[0].toFixed(1)+','+q[1].toFixed(1)).join(' ')}" fill="none" style="stroke:${V(t)}" stroke-width="3.5" stroke-dasharray="7 4" stroke-linecap="round" opacity=".9"/>`;const m=pts[pts.length>>1];h+=`<text class="cn" style="--c:${V(t)}" x="${m[0].toFixed(1)}" y="${(m[1]-6).toFixed(1)}" font-size="9">防衛線</text>`}};
+  S.def.forEach((d,t)=>{if(d.on)ln(d.pts,t)});
+  S.fl.forEach(l=>ln(l.pts,l.t));
+  [0,1].forEach(t=>{const q=S.fpts[t];if(S.phase!='setup'&&q.length>1)h+=`<polyline points="${q.map(v=>v[0].toFixed(1)+','+v[1].toFixed(1)).join(' ')}" fill="none" style="stroke:${V(t)}" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round" opacity=".85"/>`});
+  CAPS.forEach((c,t)=>{
+    h+=`<g class="u${t}"><circle cx="${c.x}" cy="${c.y}" r="${CAPR}" fill="none" style="stroke:${V(t)}" stroke-width="1.3" stroke-dasharray="3 3" opacity=".8"/>`;
+    if(S.cp[t]>0)h+=`<circle cx="${c.x}" cy="${c.y}" r="${CAPR}" fill="none" style="stroke:${V(1-t)}" stroke-width="4" stroke-dasharray="${(Math.min(1,S.cp[t]/(S.capT||CAPT))*125.7).toFixed(1)} 200" transform="rotate(-90 ${c.x} ${c.y})"/>`;
+    h+=`<text x="${c.x}" y="${c.y+6}" font-size="17" text-anchor="middle" style="fill:var(--acc);stroke:var(--ink)" stroke-width=".6">★</text><text class="cn" x="${c.x}" y="${c.y+CAPR+12}">${esc(NM[t])}の首都</text></g>`;
+  });
+  S.units.forEach(u=>{if(u.f&&u.f.hp>0)h+=`<line x1="${u.x.toFixed(1)}" y1="${u.y.toFixed(1)}" x2="${u.f.x.toFixed(1)}" y2="${u.f.y.toFixed(1)}" style="stroke:${V(u.team)}" stroke-width="1.3" stroke-opacity=".75" stroke-dasharray="2 2"/>`});
+  S.units.forEach(u=>{
+    const body=u.sea?ship(u)
+      :`<rect x="-10" y="-6.5" width="20" height="13" rx="1.5" style="fill:var(--c)" stroke="#fff" stroke-width=".8"/>`+(u.ty==1?`<ellipse cx="0" cy="0" rx="6" ry="3" fill="none" stroke="#fff" stroke-width="1.3"/>`:u.ty==2?`<circle cx="0" cy="0" r="2.8" fill="#fff"/>`:`<path d="M-10,-6.5L10,6.5M10,-6.5L-10,6.5" stroke="#fff" stroke-width=".9"/>`);
+    const sh=(u.line?`<rect x="-12.5" y="-8.5" width="25" height="17" rx="3" fill="none" style="stroke:var(--acc)" stroke-width="1.8"/>`:'')+((!u.sea&&u.sup<.2&&S.phase!='setup')?`<text x="14" y="-3" font-size="10" text-anchor="middle" style="fill:var(--acc);stroke:var(--ink)" stroke-width=".4">⚠</text>`:'');
+    h+=`<g class="u${u.team}" transform="translate(${u.x.toFixed(1)},${u.y.toFixed(1)}) scale(.7)">${sh}${body}<rect x="-10" y="8" width="20" height="2.2" fill="#000" fill-opacity=".25"/><rect x="-10" y="8" width="${(20*Math.max(0,u.hp)/(u.mh||100)).toFixed(1)}" height="2.2" style="fill:var(--c)"/></g>`;
+  });
+  S.fx.forEach(f=>{const k=f.t/f.d,big=f.txt=='✕';if(f.nuke){h+=`<circle cx="${f.x.toFixed(1)}" cy="${f.y.toFixed(1)}" r="${(8+f.R*Math.min(1,k*2.2)).toFixed(1)}" style="fill:var(--acc)" fill-opacity="${(.6*(1-k)).toFixed(2)}"/><circle cx="${f.x.toFixed(1)}" cy="${f.y.toFixed(1)}" r="${(8+f.R*Math.min(1,k*2.2)).toFixed(1)}" fill="none" stroke="#fff" stroke-width="3" opacity="${(1-k).toFixed(2)}"/><text x="${f.x.toFixed(1)}" y="${(f.y+8).toFixed(1)}" font-size="24" text-anchor="middle" opacity="${(1-k).toFixed(2)}">☢</text>`;return}
+    if(f.bomb){const q=Math.min(1,k*2);h+=`<text x="${(f.x0+(f.x-f.x0)*q).toFixed(1)}" y="${(f.y0+(f.y-f.y0)*q).toFixed(1)}" font-size="13" text-anchor="middle" style="fill:${V(f.team)};stroke:var(--land)" stroke-width="3" paint-order="stroke">✈</text>`;if(k>.45){const e=(k-.45)/.55;h+=`<circle cx="${f.x.toFixed(1)}" cy="${f.y.toFixed(1)}" r="${(6+24*e).toFixed(1)}" fill="none" style="stroke:var(--acc)" stroke-width="3" opacity="${(1-e).toFixed(2)}"/>`}return}h+=`<text x="${f.x.toFixed(1)}" y="${(f.y+(big?4:-k*10)).toFixed(1)}" font-size="${big?14:12}" font-weight="700" text-anchor="middle" style="fill:${V(f.team)};stroke:var(--land)" stroke-width="${big?0:3}" paint-order="stroke" opacity="${(1-k).toFixed(2)}">${f.txt}</text>`});
+  $('#L').innerHTML=h;
+  const tc=[0,0];S.own.forEach(o=>tc[o]++);const tot=tc[0]+tc[1]||1;
+  const sm=t=>{const a=S.units.filter(u=>u.team==t);return `${a.length} 個師団（海上 ${a.filter(u=>u.sea).length}）／領土 ${Math.round(tc[t]/tot*100)}%／士気 ${Math.round(S.mor[t])}%<br><small>組織力 ${Math.round(a.length?a.reduce((x,u)=>x+u.org,0)/a.length:0)}%／制空 ${Math.round(S.air[t]*100)}%／制海 ${Math.round(S.sea[t]*100)}%／補給断絶 ${a.filter(u=>!u.sea&&u.sup<.2).length}個／前線:${{advance:'前進',hold:'維持',retreat:'後退'}[S.fs[t]]}</small>`+(S.co[t]>S.t?` ⚔反転攻勢(${SCN[S.cos[t]]})`:'')};
+  $('#bn').innerHTML=sm(0);$('#rn').innerHTML=sm(1);
+  $('#bar').style.width=(tc[0]/tot*100)+'%';
+  if(S.phase=='battle')$('#phase').textContent=(S.paused?'一時停止中':'交戦中')+`（${Math.floor(S.t)}秒）`+(S.lv?` 増援は無限（次 ${Math.ceil(Math.min(S.rt[0],S.rt[1]))}秒）`:'');
+  castTick();
+}
+function B(t,f,c,o){o=o||{};return `<button class="${c||''}" ${o.p!=null?`aria-pressed="${o.p}"`:''} ${o.d?'disabled':''} onclick="${f}">${t}</button>`}
+function ui(){
+  const ph=S.phase;
+  svg.classList.toggle('setup',ph=='setup');
+  if(ph=='setup')$('#phase').textContent='配置フェーズ';
+  if(ph=='over')$('#phase').textContent=`戦闘終了（${Math.floor(S.t)}秒）`;
+  $('#msg').textContent=ph=='over'?(S.win<0?'相打ち':`${NM[S.win]}の勝利！ ${S.why}`):'';
+  $('#msg').style.color=S.win==0?'var(--b)':'var(--r)';
+  $('#btns').innerHTML=ph=='setup'?
+    B('青を置く','setMode(0)','tb',{p:S.mode==0})+B('赤を置く','setMode(1)','tr',{p:S.mode==1})
+    +B('歩兵','setTy(0)','te',{p:S.ut==0})+B('戦車','setTy(1)','te',{p:S.ut==1})+B('火砲','setTy(2)','te',{p:S.ut==2})
+    +B('空母','setTy(3)','te',{p:S.ut==3})+B('戦艦','setTy(4)','te',{p:S.ut==4})+B('重巡','setTy(5)','te',{p:S.ut==5})+B('軽巡','setTy(6)','te',{p:S.ut==6})+B('駆逐','setTy(7)','te',{p:S.ut==7})
+    +B('青の首都','setMode(3)','tb',{p:S.mode==3})+B('赤の首都','setMode(4)','tr',{p:S.mode==4})+B('消しゴム','setMode(2)','te',{p:S.mode==2})
+    +B('増援：'+LV[S.lv],'lvl()')+B('サンプル配置','sample()')+B('全消去','clearAll()')
+    +B('戦闘開始','start()','p',{d:!(cnt(0)&&cnt(1))}):
+    ph=='battle'?B(S.paused?'再開':'一時停止','pause()','p')+B('速度 ×'+S.speed,'speed()')+B('配置に戻る','back()'):
+    B('もう一度戦う','again()','p')+B('配置に戻る','back()');
+  $('#help').textContent=ph=='setup'?'地図をタップかなぞると師団を置けます（陸なら四角、海なら船）。兵科は歩兵（×）・戦車（楕円・速くて強い）・火砲（●・射程が長い）から選べます。海に置くと艦艇（空母・戦艦・重巡・軽巡・駆逐）になり、艦隊は敵首都の近海へ向かい制海権を争います。艦艇は海にしか置けません。「首都」ボタンのあと陸地をタップで首都を移動。軍の名前は上の入力欄で変えられます。':
+    ph=='battle'?'師団は横並びで前線を作り、崩れそうなら撤退して新しい前線へ。補給が切れた師団（⚠）は包囲されると大きく不利になります。首都が落ちても遷都できることがあります（50%→25%→12%…）。空爆・制空権・制海権も戦況を左右します。':'';
+}
+setCast('配置フェーズ。師団を置いたら「戦闘開始」！');
+terr();draw();ui();
+</script>
+</body>
+</html>
